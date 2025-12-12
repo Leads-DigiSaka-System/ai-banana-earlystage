@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebooks
+*.ipynb_checkpoints
+notebook/
+
+# Data files (too large for Docker)
+Data/
+*.jpg
+*.jpeg
+*.png
+*.mp4
+*.avi
+
+# Analysis and visualizations
+analysis/
+visual/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Other
+.DS_Store
+*.log
+logs/
+# Note: uv.lock and pyproject.toml are needed for Docker build
+
+# Keep models directory structure but ignore large files
+# models/weights/*.pt (will be mounted as volume)
+

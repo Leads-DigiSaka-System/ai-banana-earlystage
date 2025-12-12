@@ -1,0 +1,19 @@
+# API Framework
+fastapi
+uvicorn
+python-multipart
+
+# YOLO & Machine Learning
+ultralytics
+torch
+torchvision
+
+# Image Processing
+opencv-python
+pillow
+numpy
+
+# Utilities
+pydantic
+python-dotenv
+
