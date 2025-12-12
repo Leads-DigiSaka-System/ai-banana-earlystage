@@ -17,6 +17,12 @@ This project detects and classifies Black Sigatoka disease stages in banana leav
 - Data split proportions (70/15/15)
 - All three notebooks explained
 
+**🐳 [Docker Deployment Guide](DOCKER_DEPLOYMENT.md)** - Complete Docker setup:
+- Dockerfile and docker-compose.yml
+- Quick start commands
+- Production deployment tips
+- Troubleshooting guide
+
 **This README** - Quick reference and getting started guide
 
 ---
@@ -509,17 +515,42 @@ ai-banana-earlystage/
 
 ---
 
+## 🐳 Docker Deployment
+
+### **Quick Start:**
+
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Run in background
+docker-compose up -d --build
+
+# Test API
+curl http://localhost:8000/health
+```
+
+### **Prerequisites:**
+- Docker installed
+- Model file (`best.pt`) in `models/weights/` directory
+
+**📖 See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for complete guide**
+
+---
+
 ## 🎓 Summary
 
 **Ano ang ginagawa mo:**
 1. **Preprocess** - Convert raw images to YOLO format (70/15/15 split)
 2. **Train** - Train YOLO model with hyperparameters
 3. **Evaluate** - Test on unseen test set (once only!)
+4. **Deploy** - Dockerize and deploy API
 
 **Important:**
 - ✅ Use 70/15/15 split (train/val/test)
 - ✅ Tune hyperparameters on validation set
 - ✅ Test only once on test set
 - ✅ Monitor for overfitting/underfitting
+- ✅ Use Docker for easy deployment
 
 **Good luck! 🍀**
