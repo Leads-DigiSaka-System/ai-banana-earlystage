@@ -1,556 +1,746 @@
-# 🌿 Black Sigatoka Early Stage Detection
+# Black Sigatoka Early Stage Detection System
 
-## 📋 Project Overview
+A production-ready machine learning system for detecting and classifying Black Sigatoka disease stages in banana leaves using YOLO object detection. The system identifies 7 distinct disease stages: Healthy, Stage1, Stage2, Stage3, Stage4, Stage5, and Stage6.
 
-This project detects and classifies Black Sigatoka disease stages in banana leaves using YOLO object detection. The system can identify 7 classes: Healthy, Stage1, Stage2, Stage3, Stage4, Stage5, and Stage6.
+## Table of Contents
 
----
-
-## 📚 Documentation
-
-**📖 [Complete Workflow Documentation](WORKFLOW_DOCUMENTATION.md)** - Comprehensive guide covering:
-- Complete workflow diagram
-- Preprocessing specifications and steps
-- Hyperparameter tuning guide
-- Model training process
-- Validation and testing procedures
-- Data split proportions (70/15/15)
-- All three notebooks explained
-
-**🐳 [Docker Deployment Guide](DOCKER_DEPLOYMENT.md)** - Complete Docker setup:
-- Dockerfile and docker-compose.yml
-- Quick start commands
-- Production deployment tips
-- Troubleshooting guide
-
-**This README** - Quick reference and getting started guide
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [API Documentation](#api-documentation)
+- [Model Training Workflow](#model-training-workflow)
+- [Configuration](#configuration)
+- [Deployment](#deployment)
+- [Project Structure](#project-structure)
+- [Documentation](#documentation)
+- [Performance Metrics](#performance-metrics)
+- [Troubleshooting](#troubleshooting)
+- [References](#references)
 
 ---
 
-## 🎯 Ano ang Gagawin Mo? (What You Need to Do)
+## Overview
 
-### **Step 1: Data Preprocessing** (`data-labeling-classification.ipynb`)
+This project implements an end-to-end machine learning pipeline for agricultural disease detection, specifically targeting Black Sigatoka (Mycosphaerella fijiensis) in banana plants. The system combines:
 
-**Gawin mo:**
-1. **Collect images** - Organize banana leaf images by stage folders (Stage1, Stage2, etc.)
-2. **Quality check** - Run quality assessment to filter out blurry/dark images
-3. **Image tiling** - Split large images into 256x256 tiles for more training data
-4. **Data splitting** - Split into 70% train / 15% validation / 15% test
-5. **Augmentation** - Apply augmentation to training set only
-6. **YOLO conversion** - Convert to YOLO format (images + labels)
+- **Computer Vision**: YOLO12-based object detection model
+- **REST API**: FastAPI-based inference service
+- **Data Pipeline**: Automated preprocessing, augmentation, and dataset management
+- **Production Deployment**: Dockerized containerization for scalable deployment
 
-**Output:** YOLO-formatted dataset with `data.yaml` configuration file
+### Key Capabilities
 
----
-
-### **Step 2: Dataset Merging** (`bsed-datasets-merge.ipynb`) [Optional but Recommended]
-
-**Gawin mo:**
-1. **Load datasets** - Load BSED dataset and Roboflow dataset
-2. **Class mapping** - Map different class names to unified scheme:
-   - Functional → Healthy
-   - Mild → Stage4
-   - Moderate → Stage5
-   - Severe → Stage6
-3. **Merge datasets** - Combine both datasets with updated class IDs
-4. **Create combined data.yaml** - Generate unified configuration
-
-**Output:** `combined_yolo_dataset/` with 7 classes (Healthy, Stage1-6)
-
-**Why merge?**
-- BSED dataset has Stage1, Stage2, Stage3
-- Roboflow dataset has Functional, Mild, Moderate, Severe
-- Combined = More training data with all 7 classes
+- **Multi-stage Classification**: Detects 7 disease progression stages
+- **Real-time Inference**: Fast API response times with optimized model serving
+- **Image Tiling**: Handles high-resolution images through intelligent tiling
+- **Production Ready**: Docker deployment with health checks and monitoring
 
 ---
 
-### **Step 3: Model Training** (`bsed-training.ipynb`)
+## Architecture
 
-**Gawin mo:**
-1. **Load dataset** - Load the YOLO dataset from preprocessing
-2. **Setup model** - Load YOLO12n (or larger model)
-3. **Configure hyperparameters** - Set learning rate, batch size, etc.
-4. **Train model** - Run training with validation monitoring
-5. **Monitor training** - Check for overfitting/underfitting
-6. **Save best model** - Model automatically saves best weights
-
-**Output:** Trained model weights (`best.pt` and `last.pt`)
-
----
-
-### **Step 4: Evaluation** (`bsed-training.ipynb`)
-
-**Gawin mo:**
-1. **Test set evaluation** - Run final evaluation on test set (ONCE only!)
-2. **Check metrics** - Review mAP50, precision, recall
-3. **Analyze results** - Check per-class performance
-4. **Visualize predictions** - See model predictions on test images
-
-**Output:** Performance metrics and visualizations
-
----
-
-## 📊 Data Split Proportions
-
-### ✅ **ACTUAL SPLIT: 70% / 15% / 15%**
-
-> **📖 For detailed specifications, see [WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md)**
+### System Components
 
 ```
-┌─────────────────────────────────────────┐
-│         TOTAL DATASET (100%)            │
-├─────────────────────────────────────────┤
-│                                         │
-│  ┌──────────────┐  ┌──────────┐       │
-│  │   TRAIN      │  │   VAL    │       │
-│  │    70%       │  │   15%    │       │
-│  │              │  │          │       │
-│  │  • Learning  │  │  • Tuning │       │
-│  │  • Fitting  │  │  • Early  │       │
-│  │             │  │    Stop   │       │
-│  └──────────────┘  └──────────┘       │
-│                                         │
-│         ┌──────────┐                  │
-│         │   TEST   │                  │
-│         │   15%    │                  │
-│         │          │                  │
-│         │  • Final │                  │
-│         │  • Eval  │                  │
-│         └──────────┘                  │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Client Applications                      │
+│              (Web, Mobile, IoT Devices)                    │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ HTTP/REST API
+                       │
+┌──────────────────────▼──────────────────────────────────────┐
+│                  FastAPI Application                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│  │   Router     │  │  Validation  │  │  Formatting  │    │
+│  │  (Endpoints) │  │   Service    │  │   Service    │    │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘    │
+│         │                  │                  │            │
+│         └──────────────────┼──────────────────┘            │
+│                          │                                │
+│                  ┌───────▼────────┐                       │
+│                  │ Detection       │                       │
+│                  │ Service         │                       │
+│                  └───────┬────────┘                       │
+└──────────────────────────┼────────────────────────────────┘
+                           │
+                           │
+┌──────────────────────────▼────────────────────────────────┐
+│              Inference Engine                              │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │  Image Processing  │  Model Inference  │  Tiling    │  │
+│  │  (Preprocessing)  │  (YOLO12)        │  (256x256)  │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────────┬────────────────────────────────┘
+                           │
+                           │
+┌──────────────────────────▼────────────────────────────────┐
+│              Model Storage                                │
+│              models/weights/best.pt                        │
+└───────────────────────────────────────────────────────────┘
 ```
 
-**Bakit ganito ang split?**
-- **70% Training**: Kailangan ng maraming data para matuto ang model
-- **15% Validation**: Para sa hyperparameter tuning at early stopping
-- **15% Test**: Para sa final evaluation (HUWAG TOUCHIN pagkatapos ng training!)
+### Technology Stack
+
+- **Framework**: FastAPI 0.124+
+- **ML Framework**: Ultralytics YOLO (YOLO12n)
+- **Deep Learning**: PyTorch 2.9+
+- **Image Processing**: OpenCV 4.11+, Pillow 12.0+
+- **Containerization**: Docker, Docker Compose
+- **Python**: 3.12+
 
 ---
 
-## 🔄 Complete Workflow
+## Features
+
+### Core Functionality
+
+1. **Disease Stage Detection**
+   - 7-class classification: Healthy, Stage1 through Stage6
+   - Bounding box localization for disease regions
+   - Confidence scoring for each detection
+
+2. **Image Processing**
+   - Automatic image validation (format, size, quality)
+   - Intelligent tiling for high-resolution images (256x256 tiles)
+   - Support for JPG, PNG, JPEG formats
+   - Automatic resizing to model input size (736x736)
+
+3. **API Endpoints**
+   - Full detection with bounding boxes
+   - Classification-only endpoint
+   - Health monitoring and model information
+   - User tracking support
+
+4. **Production Features**
+   - Docker containerization
+   - Health check endpoints
+   - CORS support for web applications
+   - Error handling and validation
+   - Model caching for performance
+
+---
+
+## Prerequisites
+
+### System Requirements
+
+- **Python**: 3.12 or higher
+- **Docker**: 20.10+ (for containerized deployment)
+- **Docker Compose**: 2.0+ (optional, for easier deployment)
+- **GPU**: CUDA-capable GPU recommended for training (optional for inference)
+
+### Model Requirements
+
+- Trained YOLO model weights (`best.pt`) in `models/weights/` directory
+- Model should be trained on 736x736 input size
+- Model should support 7 classes (Healthy, Stage1-6)
+
+---
+
+## Installation
+
+### Option 1: Docker Deployment (Recommended)
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd ai-banana-earlystage
+
+# Ensure model weights are present
+ls models/weights/best.pt
+
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or run in background
+docker-compose up -d --build
+```
+
+### Option 2: Local Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd ai-banana-earlystage
+
+# Install dependencies using uv (recommended)
+pip install uv
+uv pip install -e .
+
+# Or using pip
+pip install -r requirements.txt
+
+# Ensure model weights are present
+ls models/weights/best.pt
+
+# Run the application
+python main.py
+```
+
+The API will be available at `http://localhost:8000`
+
+---
+
+## Quick Start
+
+### 1. Verify Installation
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Expected response:
+# {"status":"ok","message":"API is running"}
+```
+
+### 2. Check Model Information
+
+```bash
+curl http://localhost:8000/model/info
+
+# Returns class names and model configuration
+```
+
+### 3. Test Classification
+
+```bash
+# Using curl
+curl -X POST "http://localhost:8000/api/v1/predict/classify" \
+  -F "file=@path/to/banana_leaf.jpg" \
+  -F "user_id=test_user"
+
+# Using Python
+import requests
+
+with open('banana_leaf.jpg', 'rb') as f:
+    response = requests.post(
+        'http://localhost:8000/api/v1/predict/classify',
+        files={'file': f},
+        data={'user_id': 'test_user'}
+    )
+    print(response.json())
+```
+
+### 4. Access API Documentation
+
+Open `http://localhost:8000/docs` in your browser for interactive API documentation.
+
+---
+
+## API Documentation
+
+### Base URL
 
 ```
-1. PREPROCESSING (data-labeling-classification.ipynb)
-   ↓
-   Raw Images → Quality Check → Tiling → Splitting → Augmentation → YOLO Format
-   
-2. DATASET MERGING (bsed-datasets-merge.ipynb) [NEW!]
-   ↓
-   BSED Dataset + Roboflow Dataset → Class Mapping → Combined Dataset
-   
-3. TRAINING (bsed-training.ipynb)
-   ↓
-   Load Dataset → Setup Model → Configure → Train → Monitor → Save Best Model
-   
-4. EVALUATION (bsed-training.ipynb)
-   ↓
-   Load Best Model → Test Set Evaluation → Metrics → Visualization
+http://localhost:8000
 ```
 
-> **📖 See [WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md) for complete workflow diagram and detailed steps**
+### Endpoints
 
----
+#### 1. Health Check
 
-## 🔧 Preprocessing Steps (Detailed)
+**GET** `/health`
 
-### **Step 1: Image Quality Assessment**
+Check API health status.
 
-**Ano ang ginagawa:**
-- Checks image blur (Laplacian variance ≥ 100.0)
-- Checks brightness (20-240 range)
-- Checks resolution (minimum 256x256)
-- Checks file size (50KB - 10MB)
-
-**Code location:** `data-labeling-classification.ipynb` Cell 2-4
-
----
-
-### **Step 2: Image Tiling**
-
-**Ano ang ginagawa:**
-- Splits large images into 256x256 pixel tiles
-- Creates more training samples from limited data
-- Each tile inherits class label from parent image
-
-**Code location:** `data-labeling-classification.ipynb` Cell 5-6
-
----
-
-### **Step 3: Data Splitting**
-
-**Ano ang ginagawa:**
-```python
-# Step 1: 70% train, 30% val+test
-train_df, val_test_df = train_test_split(
-    labels_df, 
-    test_size=0.3,  # 30% for val+test
-    stratify=labels_df['class_label']  # Maintain class balance
-)
-
-# Step 2: 30% → 15% val + 15% test
-val_df, test_df = train_test_split(
-    val_test_df,
-    test_size=0.5,  # Split 30% into 15% val + 15% test
-    stratify=val_test_df['class_label']
-)
-```
-
-**Code location:** `data-labeling-classification.ipynb` Cell 8
-
----
-
-### **Step 4: Data Augmentation**
-
-**Ano ang ginagawa:**
-- Applied to TRAIN set only (not val/test)
-- Rotation, brightness adjustment, crop/zoom, horizontal flip
-- Doubles training data (436 → 872 images)
-
-**Code location:** `data-labeling-classification.ipynb` Cell 13-14
-
----
-
-### **Step 5: YOLO Format Conversion**
-
-**Ano ang ginagawa:**
-- Converts annotations to YOLO format
-- Creates `data.yaml` configuration file
-- Organizes into train/valid/test folders with images/ and labels/ subfolders
-
-**Code location:** `data-labeling-classification.ipynb` Cell 25-26
-
----
-
-## ⚙️ Hyperparameter Tuning
-
-### **Key Hyperparameters to Tune:**
-
-| Parameter | Options | Default | Purpose |
-|-----------|---------|---------|---------|
-| **Learning Rate (lr0)** | 0.0001 - 0.01 | 0.001 | Controls how fast model learns |
-| **Batch Size** | 8, 16, 32, 64 | 32 | Images processed per batch |
-| **Image Size (imgsz)** | 640, 736, 1280 | 736 | Input image resolution |
-| **Optimizer** | SGD, Adam, AdamW | AdamW | Optimization algorithm |
-| **Epochs** | 10 - 100+ | 10 | Number of training cycles |
-
-### **How to Tune:**
-
-1. **Start with defaults** - Use recommended values first
-2. **Train for few epochs** - Test with 5-10 epochs
-3. **Check validation metrics** - Look at mAP50 on validation set
-4. **Adjust one at a time** - Change one parameter, test, then change another
-5. **Use validation set** - Never use test set for tuning!
-6. **Document changes** - Keep track of what works
-
-**Code location:** `bsed-training.ipynb` Cell 6 (training_config dictionary)
-
----
-
-## 🚀 Model Training Process
-
-### **Training Configuration (Current Setup):**
-
-```python
-training_config = {
-    'epochs': 10,           # Training cycles
-    'batch': 32,            # Images per batch
-    'imgsz': 736,          # Image size
-    'optimizer': 'AdamW',  # Optimizer
-    'lr0': 0.001,          # Learning rate
-    'patience': 20,        # Early stopping patience
-    # ... more parameters
+**Response:**
+```json
+{
+  "status": "ok",
+  "message": "API is running"
 }
 ```
 
-### **What Happens During Training:**
+#### 2. Model Information
 
-1. **For each epoch:**
-   - Load batch from TRAIN set
-   - Apply augmentation
-   - Forward pass → predictions
-   - Compute loss (box + classification + DFL)
-   - Backward pass → gradients
-   - Update weights
+**GET** `/model/info`
 
-2. **After each epoch:**
-   - Validate on VALIDATION set
-   - Compute mAP50, precision, recall
-   - Check for early stopping
-   - Save best model
+Get model configuration and class information.
 
-3. **Training stops when:**
-   - Max epochs reached
-   - Early stopping triggered (no improvement for 20 epochs)
-   - Manual stop
-
-**Code location:** `bsed-training.ipynb` Cell 6
-
----
-
-## 📈 Validation & Testing
-
-### **Validation (During Training):**
-
-**Purpose:** Monitor training progress and prevent overfitting
-
-**When:** After each epoch
-
-**Metrics:**
-- **mAP50**: Mean Average Precision at IoU=0.5 (main metric)
-- **mAP50-95**: mAP across IoU 0.5-0.95 (stricter metric)
-- **Precision**: How many detections are correct?
-- **Recall**: How many actual objects were found?
-- **Loss**: Training and validation loss
-
-**What to look for:**
-- ✅ **Good**: mAP50 > 0.7, train loss decreasing, val loss decreasing
-- ⚠️ **Overfitting**: Train loss low but val loss high (gap > 0.15)
-- ⚠️ **Underfitting**: Both train and val loss high, mAP50 < 0.5
-
----
-
-### **Testing (Final Evaluation):**
-
-**Purpose:** Get unbiased performance estimate on unseen data
-
-**When:** ONCE ONLY, after training is complete
-
-**Dataset:** TEST set (never used during training!)
-
-**Metrics:**
-- Overall mAP50, mAP50-95
-- Per-class Average Precision
-- Precision, Recall, F1 Score
-- Confusion matrix
-
-**⚠️ IMPORTANT:** 
-- **HUWAG** gamitin ang test set during training
-- **HUWAG** gamitin ang test set for hyperparameter tuning
-- **ONCE LANG** i-run ang test set evaluation
-
-**Code location:** `bsed-training.ipynb` Cell 7
-
----
-
-## 📝 Step-by-Step Guide
-
-### **Phase 1: Preprocessing** (Do this first!)
-
-1. Open `data-labeling-classification.ipynb`
-2. Run cells in order:
-   - Cell 1-2: Setup and imports
-   - Cell 3-4: Image quality assessment
-   - Cell 5-6: Image tiling
-   - Cell 8: Data splitting (70/15/15)
-   - Cell 13-14: Data augmentation
-   - Cell 25-26: YOLO format conversion
-3. Check output: Should have `yolo_classification_dataset/` folder with `data.yaml`
-
----
-
-### **Phase 2: Dataset Merging** (Optional but Recommended)
-
-1. Open `bsed-datasets-merge.ipynb`
-2. Run cells in order:
-   - Cell 0-1: Load BSED and Roboflow datasets
-   - Cell 3: Configure class mapping
-   - Cell 4: Process Roboflow dataset
-   - Cell 5: Process BSED dataset
-   - Cell 6: Create combined data.yaml
-3. Check output: Should have `combined_yolo_dataset/` folder with 7 classes
-
----
-
-### **Phase 3: Training** (After preprocessing/merging)
-
-1. Open `bsed-training.ipynb`
-2. Run cells in order:
-   - Cell 1-2: Install packages and check GPU
-   - Cell 3: Imports
-   - **Cell 4**: Verify data split proportions (check if 70/15/15)
-   - Cell 5: Load dataset
-   - Cell 6: Visualize sample annotations
-   - Cell 7: Setup YOLO model
-   - **Cell 8**: Train model (this takes time!)
-   - Cell 9: Evaluate on test set
-   - Cell 10: Overfitting analysis
-   - Cell 11: Prediction visualization
-
----
-
-### **Phase 4: Evaluation** (After training)
-
-1. Check training results:
-   - Look at `runs/detect/banana_pest_disease_yolo11/results.png`
-   - Check mAP50 progression
-   - Verify best model saved
-
-2. Run test set evaluation:
-   - Cell 9: Comprehensive performance evaluation
-   - Check per-class metrics
-   - Review confusion matrix
-
-3. Analyze results:
-   - Cell 10: Overfitting/underfitting detection
-   - Cell 11: Visualize predictions on test images
-
----
-
-## 🎯 Key Metrics Explained
-
-### **mAP50 (Mean Average Precision at IoU=0.5)**
-- **Main metric** for object detection
-- **Range**: 0.0 to 1.0 (higher = better)
-- **Good**: >0.7
-- **Excellent**: >0.8
-
-### **Precision**
-- **Question**: How many detections are correct?
-- **High precision** = Fewer false positives
-- **Formula**: True Positives / (True Positives + False Positives)
-
-### **Recall**
-- **Question**: How many actual objects were found?
-- **High recall** = Fewer false negatives
-- **Formula**: True Positives / (True Positives + False Negatives)
-
-### **F1 Score**
-- **Balance** between precision and recall
-- **Formula**: 2 × (Precision × Recall) / (Precision + Recall)
-
----
-
-## ✅ Best Practices
-
-### **DO:**
-1. ✅ **Stratified split** - Maintain class distribution
-2. ✅ **Use validation set** for hyperparameter tuning
-3. ✅ **Save best model** based on validation mAP
-4. ✅ **Monitor overfitting** (train vs val loss gap)
-5. ✅ **Test only once** on final test set
-6. ✅ **Document all hyperparameters** used
-
-### **DON'T:**
-1. ❌ **Don't use test set** during training/tuning
-2. ❌ **Don't tune on test set** - causes data leakage
-3. ❌ **Don't stop early** without patience mechanism
-4. ❌ **Don't ignore class imbalance** - use weighted loss if needed
-5. ❌ **Don't over-augment** - can hurt performance
-
----
-
-## 📁 Project Structure
-
-```
-ai-banana-earlystage/
-├── Data/
-│   └── Sigatoka pics/
-│       ├── Stage1/
-│       ├── Stage2/
-│       └── ...
-├── notebook/
-│   ├── data-labeling-classification.ipynb  # Preprocessing
-│   ├── bsed-datasets-merge.ipynb           # Dataset merging
-│   └── bsed-training.ipynb                 # Training & Evaluation
-├── README.md                                # Quick reference (this file)
-├── WORKFLOW_DOCUMENTATION.md                # Complete documentation
-└── pyproject.toml
+**Response:**
+```json
+{
+  "classes": {
+    "0": "Healthy",
+    "1": "Stage1",
+    "2": "Stage2",
+    "3": "Stage3",
+    "4": "Stage4",
+    "5": "Stage5",
+    "6": "Stage6"
+  },
+  "num_classes": 7,
+  "class_names": ["Healthy", "Stage1", "Stage2", "Stage3", "Stage4", "Stage5", "Stage6"]
+}
 ```
 
+#### 3. Full Detection
+
+**POST** `/api/v1/predict`
+
+Detect disease stages with bounding box coordinates.
+
+**Request:**
+- `file` (multipart/form-data): Image file (JPG, PNG, JPEG)
+- `user_id` (optional, form-data): User identifier for tracking
+
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": "test_user",
+  "image_size": {
+    "width": 1920,
+    "height": 1080
+  },
+  "detections": [
+    {
+      "class_id": 2,
+      "class_name": "Stage2",
+      "confidence": 0.85,
+      "bbox": {
+        "x1": 100.5,
+        "y1": 200.3,
+        "x2": 350.7,
+        "y2": 450.9
+      }
+    }
+  ]
+}
+```
+
+#### 4. Classification Only
+
+**POST** `/api/v1/predict/classify`
+
+Get disease classification without bounding boxes (simplified output).
+
+**Request:**
+- `file` (multipart/form-data): Image file
+- `user_id` (optional, form-data): User identifier
+
+**Response:**
+```json
+{
+  "user_id": "test_user",
+  "class_name": "Stage2",
+  "confidence": 0.85
+}
+```
+
+#### 5. Debug Endpoint
+
+**POST** `/api/v1/predict/classify/debug`
+
+Debug endpoint with low confidence threshold to diagnose detection issues.
+
+**Response:**
+```json
+{
+  "user_id": "test_user",
+  "all_detections": [...],
+  "classes_detected": [...],
+  "total_detections": 5,
+  "top_class": "Stage2",
+  "top_confidence": 0.85
+}
+```
+
+### Error Responses
+
+**400 Bad Request:**
+```json
+{
+  "detail": "Error message describing the issue"
+}
+```
+
+Common errors:
+- Invalid image format
+- Image file too large
+- Image dimensions exceed limits
+- Model not found
+
 ---
 
-## 🔗 Quick Reference
+## Model Training Workflow
 
-### **Notebooks:**
+The model training process consists of three main phases:
 
-1. **Preprocessing Notebook:**
-   - **File**: `data-labeling-classification.ipynb`
-   - **Purpose**: Convert raw images to YOLO format
-   - **Output**: `yolo_classification_dataset/` with `data.yaml`
+### Phase 1: Data Preprocessing
 
-2. **Dataset Merging Notebook:**
-   - **File**: `bsed-datasets-merge.ipynb`
-   - **Purpose**: Combine BSED and Roboflow datasets with class mapping
-   - **Output**: `combined_yolo_dataset/` with 7 classes
+**Notebook:** `notebook/data-labeling-classification.ipynb`
 
-3. **Training Notebook:**
-   - **File**: `bsed-training.ipynb`
-   - **Purpose**: Train YOLO model and evaluate
-   - **Output**: Trained model in `runs/detect/`
+**Steps:**
+1. **Image Quality Assessment**: Filter images based on blur, brightness, resolution, and file size
+2. **Image Tiling**: Split large images into 256x256 tiles for increased training data
+3. **Data Splitting**: Stratified split into 70% train / 15% validation / 15% test
+4. **Data Augmentation**: Apply rotation, brightness, crop/zoom, and horizontal flip to training set
+5. **YOLO Format Conversion**: Convert annotations to YOLO format with `data.yaml` configuration
+
+**Output:** `yolo_classification_dataset/` directory with YOLO-formatted data
+
+### Phase 2: Dataset Merging (Optional)
+
+**Notebook:** `notebook/bsed-datasets-merge.ipynb`
+
+**Purpose:** Combine multiple datasets with unified class mapping
+
+**Class Mapping:**
+- Functional → Healthy (ID: 0)
+- Stage1 → Stage1 (ID: 1)
+- Stage2 → Stage2 (ID: 2)
+- Stage3 → Stage3 (ID: 3)
+- Mild → Stage4 (ID: 4)
+- Moderate → Stage5 (ID: 5)
+- Severe → Stage6 (ID: 6)
+
+**Output:** `combined_yolo_dataset/` with 7 unified classes
+
+### Phase 3: Model Training
+
+**Notebook:** `notebook/bsed-training.ipynb`
+
+**Configuration:**
+- **Model**: YOLO12n (nano variant)
+- **Input Size**: 736x736 pixels
+- **Batch Size**: 32
+- **Optimizer**: AdamW
+- **Learning Rate**: 0.001 (initial) with cosine annealing
+- **Epochs**: 10 (configurable)
+- **Early Stopping**: Patience = 20 epochs
+
+**Training Process:**
+1. Load and verify dataset split proportions
+2. Initialize YOLO model
+3. Configure hyperparameters
+4. Train with validation monitoring
+5. Save best model weights
+6. Evaluate on test set (once only)
+7. Generate performance metrics and visualizations
+
+**Output:**
+- `best.pt`: Best model weights based on validation mAP
+- `last.pt`: Final epoch weights
+- Training metrics and visualizations in `runs/detect/`
+
+### Data Split Strategy
+
+**Proportions:** 70% Training / 15% Validation / 15% Test
+
+**Rationale:**
+- **70% Training**: Maximum data for model learning
+- **15% Validation**: Sufficient for hyperparameter tuning and early stopping
+- **15% Test**: Adequate for unbiased final evaluation
+
+**Important:** The test set should only be used once for final evaluation after training is complete.
 
 ---
 
-## 💡 Tips & Troubleshooting
+## Configuration
 
-### **If training is slow:**
-- Check if GPU is available (Cell 2)
-- Reduce batch size (16 or 8)
-- Reduce image size (640 instead of 736)
+### Model Configuration (`config.py`)
 
-### **If mAP50 is low (<0.5):**
-- Train for more epochs
-- Use larger model (yolo12s, yolo12m)
-- Check data quality and labels
-- Increase augmentation
+```python
+# Model paths and thresholds
+MODEL_PATH = Path("models/weights/best.pt")
+MODEL_CONFIDENCE = 0.25  # Detection confidence threshold
+MODEL_IOU = 0.7  # IoU threshold for NMS
+MODEL_IMAGE_SIZE = 736  # Input image size (must match training)
 
-### **If overfitting (val loss > train loss):**
-- Increase augmentation
-- Add more training data
-- Reduce model size
-- Use early stopping
+# Tiling configuration
+USE_TILING = True  # Enable image tiling for inference
+TILE_SIZE = 256  # Tile size (matches training)
+TILE_OVERLAP = 0.1  # 10% overlap between tiles
 
-### **If underfitting (both losses high):**
-- Train for more epochs
-- Use larger model
-- Reduce augmentation
-- Check data quality
+# Class names
+CLASS_NAMES = {
+    0: "Healthy",
+    1: "Stage1",
+    2: "Stage2",
+    3: "Stage3",
+    4: "Stage4",
+    5: "Stage5",
+    6: "Stage6"
+}
+
+# API configuration
+HOST = "0.0.0.0"
+PORT = 8000
+MAX_IMAGE_DIMENSION = 10000  # Maximum width/height in pixels
+MAX_IMAGE_MEMORY_MB = 50  # Maximum file size in MB
+```
+
+### Environment Variables
+
+Create a `.env` file (optional) to override defaults:
+
+```env
+HOST=0.0.0.0
+PORT=8000
+MODEL_PATH=models/weights/best.pt
+MODEL_CONFIDENCE=0.25
+```
 
 ---
 
-## 📚 Additional Resources
+## Deployment
 
-- **YOLO Documentation**: https://docs.ultralytics.com/
-- **Ultralytics GitHub**: https://github.com/ultralytics/ultralytics
-- **YOLO Format Guide**: https://docs.ultralytics.com/datasets/
+### Docker Deployment
 
----
-
-## 🐳 Docker Deployment
-
-### **Quick Start:**
+#### Using Docker Compose (Recommended)
 
 ```bash
-# Build and run with Docker Compose
+# Build and start
 docker-compose up --build
 
 # Run in background
 docker-compose up -d --build
 
-# Test API
-curl http://localhost:8000/health
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
 ```
 
-### **Prerequisites:**
-- Docker installed
-- Model file (`best.pt`) in `models/weights/` directory
+#### Using Docker Directly
 
-**📖 See [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for complete guide**
+```bash
+# Build image
+docker build -t banana-disease-api .
+
+# Run container
+docker run -d \
+  --name banana-disease-api \
+  -p 8000:8000 \
+  -v $(pwd)/models:/app/models \
+  banana-disease-api
+```
+
+### Production Considerations
+
+1. **Security**
+   - Restrict CORS origins in production
+   - Implement authentication/authorization
+   - Use HTTPS/TLS
+   - Validate and sanitize all inputs
+
+2. **Performance**
+   - Use GPU acceleration if available
+   - Implement request queuing for high traffic
+   - Consider model quantization for faster inference
+   - Use load balancing for multiple instances
+
+3. **Monitoring**
+   - Set up health check monitoring
+   - Log API requests and errors
+   - Monitor model performance metrics
+   - Track inference latency
+
+4. **Scaling**
+   - Use container orchestration (Kubernetes, Docker Swarm)
+   - Implement horizontal scaling
+   - Use shared model storage (S3, NFS)
+   - Consider model serving frameworks (TensorFlow Serving, TorchServe)
+
+For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)
 
 ---
 
-## 🎓 Summary
+## Project Structure
 
-**Ano ang ginagawa mo:**
-1. **Preprocess** - Convert raw images to YOLO format (70/15/15 split)
-2. **Train** - Train YOLO model with hyperparameters
-3. **Evaluate** - Test on unseen test set (once only!)
-4. **Deploy** - Dockerize and deploy API
+```
+ai-banana-earlystage/
+├── Data/                          # Raw image data
+│   └── Sigatoka pics/
+│       ├── Stage1/
+│       ├── Stage2/
+│       └── Stage3/
+├── notebook/                      # Jupyter notebooks for training
+│   ├── data-labeling-classification.ipynb  # Preprocessing
+│   ├── bsed-datasets-merge.ipynb            # Dataset merging
+│   └── bsed-training.ipynb                  # Model training
+├── services/                      # Core service modules
+│   ├── detection_service.py       # Main detection logic
+│   ├── inference.py               # Model inference
+│   ├── image_processing.py        # Image preprocessing
+│   ├── validation.py              # Input validation
+│   └── formatting.py              # Response formatting
+├── router/                        # API routes
+│   └── process.py                 # API endpoints
+├── models/                        # Model storage
+│   └── weights/
+│       ├── best.pt                # Best model weights
+│       └── last.pt                # Last epoch weights
+├── analysis/                      # Analysis results
+├── visual/                        # Training visualizations
+├── logs/                          # Application logs
+├── main.py                        # FastAPI application entry point
+├── config.py                      # Configuration settings
+├── requirements.txt               # Python dependencies
+├── pyproject.toml                 # Project metadata
+├── Dockerfile                     # Docker image definition
+├── docker-compose.yml             # Docker Compose configuration
+├── README.md                      # This file
+├── WORKFLOW_DOCUMENTATION.md      # Detailed workflow guide
+├── DOCKER_DEPLOYMENT.md           # Docker deployment guide
+└── BUILD_LOCAL.md                 # Local build instructions
+```
 
-**Important:**
-- ✅ Use 70/15/15 split (train/val/test)
-- ✅ Tune hyperparameters on validation set
-- ✅ Test only once on test set
-- ✅ Monitor for overfitting/underfitting
-- ✅ Use Docker for easy deployment
+---
 
-**Good luck! 🍀**
+## Documentation
+
+### Additional Documentation
+
+- **[WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md)**: Comprehensive workflow documentation covering:
+  - Complete preprocessing pipeline
+  - Hyperparameter tuning guide
+  - Training process details
+  - Validation and testing procedures
+  - Data split specifications
+
+- **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**: Docker deployment guide with:
+  - Dockerfile explanation
+  - Docker Compose setup
+  - Production deployment tips
+  - Troubleshooting guide
+
+- **[BUILD_LOCAL.md](BUILD_LOCAL.md)**: Local build and testing instructions
+
+---
+
+## Performance Metrics
+
+### Model Performance Targets
+
+- **mAP50**: > 0.7 (Good: >0.7, Excellent: >0.8)
+- **mAP50-95**: > 0.5
+- **Precision**: > 0.7
+- **Recall**: > 0.7
+- **F1 Score**: > 0.7
+
+### Inference Performance
+
+- **Latency**: < 500ms per image (CPU), < 100ms (GPU)
+- **Throughput**: 10+ requests/second (CPU), 50+ requests/second (GPU)
+- **Memory**: ~2GB RAM (CPU), ~4GB VRAM (GPU)
+
+*Note: Actual performance depends on hardware, image size, and model variant.*
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### Model Not Found
+
+**Error:** `Model not found at models/weights/best.pt`
+
+**Solution:**
+```bash
+# Ensure model file exists
+ls -lh models/weights/best.pt
+
+# If missing, copy trained model to this location
+cp path/to/trained/best.pt models/weights/best.pt
+```
+
+#### Port Already in Use
+
+**Error:** `Address already in use`
+
+**Solution:**
+```bash
+# Find process using port 8000
+# Linux/Mac:
+lsof -i :8000
+
+# Windows:
+netstat -ano | findstr :8000
+
+# Change port in config.py or docker-compose.yml
+```
+
+#### Image Processing Errors
+
+**Error:** `Could not decode image` or `Image file too large`
+
+**Solution:**
+- Verify image format (JPG, PNG, JPEG)
+- Check image file size (< 50MB)
+- Ensure image dimensions are reasonable (< 10000px)
+- Verify image is not corrupted
+
+#### Docker Build Fails
+
+**Error:** Build errors during Docker image creation
+
+**Solution:**
+```bash
+# Clean build without cache
+docker-compose build --no-cache
+
+# Check Docker logs
+docker-compose logs
+
+# Verify Dockerfile syntax
+docker build --no-cache -t test-image .
+```
+
+#### Low Detection Accuracy
+
+**Possible Causes:**
+- Model not properly trained
+- Image quality issues
+- Mismatch between training and inference image sizes
+- Confidence threshold too high
+
+**Solutions:**
+- Retrain model with more data
+- Adjust `MODEL_CONFIDENCE` in `config.py`
+- Verify image preprocessing matches training pipeline
+- Check model input size matches training (736x736)
+
+For more troubleshooting help, see [DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHOOTING.md)
+
+---
+
+## References
+
+### Technical Documentation
+
+- **YOLO Documentation**: https://docs.ultralytics.com/
+- **Ultralytics GitHub**: https://github.com/ultralytics/ultralytics
+- **FastAPI Documentation**: https://fastapi.tiangolo.com/
+- **PyTorch Documentation**: https://pytorch.org/docs/
+
+### Research & Standards
+
+- YOLO Object Detection: Redmon et al., "You Only Look Once" (2016)
+- Black Sigatoka Disease: Agricultural research on Mycosphaerella fijiensis
+- YOLO Format Specification: https://docs.ultralytics.com/datasets/
+
+---
+
+## License
+
+[Specify your license here]
+
+## Contributors
+
+[Add contributor information]
+
+## Acknowledgments
+
+[Add acknowledgments if applicable]
+
+---
+
+**For detailed workflow and training instructions, please refer to [WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md)**
