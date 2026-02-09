@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from router.process import router
+from router.feedback import router as feedback_router
+from router.database_crud import router as db_router
 from services.inference import load_model
 from config import HOST, PORT, CLASS_NAMES
 
@@ -22,8 +24,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include router
+# Include routers
 app.include_router(router)
+app.include_router(feedback_router)
+app.include_router(db_router)
 
 
 @app.on_event("startup")
@@ -46,6 +50,11 @@ async def root():
         "endpoints": {
             "/api/v1/predict": "POST - Upload image for disease detection (with bounding boxes)",
             "/api/v1/predict/classify": "POST - Classification only (no bounding boxes)",
+            "/api/v1/feedback": "Feedback: POST /submit, GET /stats - see /docs#/feedback",
+            "/api/v1/db/feedback": "GET list, GET /:id, PATCH /:id, DELETE /:id - CRUD",
+            "/api/v1/db/predictions": "GET list, GET /:id, PATCH /:id, DELETE /:id - CRUD + search",
+            "/api/v1/db/training-data": "GET list, GET /:id, PATCH /:id, DELETE /:id - CRUD + search",
+            "/api/v1/db/model-performance": "GET list, GET /:id, PATCH /:id, DELETE /:id - CRUD + search",
             "/health": "GET - Check API health",
             "/model/info": "GET - Get model information"
         }

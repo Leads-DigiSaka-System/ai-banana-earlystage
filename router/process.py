@@ -1,11 +1,15 @@
 """
 API Router for Banana Disease Detection endpoints
 """
-from fastapi import APIRouter, File, UploadFile, HTTPException, Form
-from fastapi.responses import JSONResponse
 from typing import Optional
 
-from services.detection_service import process_image
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+
+from database.connection import get_db
+from services.detection_service import process_image_from_bytes
+from services.feedback_service import save_prediction
 from services.inference import load_model
 
 # Create router
@@ -15,113 +19,107 @@ router = APIRouter(prefix="/api/v1", tags=["detection"])
 @router.post("/predict")
 async def predict(
     file: UploadFile = File(...),
-    user_id: Optional[str] = Form(None)
+    user_id: Optional[str] = Form(None),
+    user_location: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
 ):
     """
-    Main prediction endpoint - Full detection with bounding boxes
-    
-    Args:
-        file: Image file (JPG, PNG, JPEG)
-        user_id: Optional user identifier for tracking
-        
-    Returns:
-        JSON response with detections and user_id
+    Main prediction endpoint - Full detection with bounding boxes.
+    If user_id is provided, prediction is saved and prediction_id is returned (for feedback).
     """
-    # Process image
-    result = await process_image(file, user_id=user_id)
-    
-    # Check if processing was successful
+    image_bytes = await file.read()
+    result = await process_image_from_bytes(
+        image_bytes, filename=file.filename or "image.jpg", user_id=user_id
+    )
     if not result.get("success", False):
         raise HTTPException(
             status_code=400,
-            detail=result.get("error", "Unknown error occurred")
+            detail=result.get("error", "Unknown error occurred"),
         )
-    
+
+    if user_id and result.get("detections"):
+        try:
+            best = max(result["detections"], key=lambda d: d["confidence"])
+            prediction_id = save_prediction(
+                db,
+                image_bytes,
+                file.filename or "image.jpg",
+                user_id,
+                best,
+                inference_time_ms=None,
+                user_location=user_location,
+            )
+            result["prediction_id"] = prediction_id
+        except Exception:
+            pass  # DB save optional; response still has detections
+
     return JSONResponse(content=result)
 
 
 @router.post("/predict/classify")
 async def predict_classify(
     file: UploadFile = File(...),
-    user_id: Optional[str] = Form(None)
+    user_id: Optional[str] = Form(None),
+    user_location: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
 ):
     """
-    Classification-only endpoint - Returns class name and confidence only
-    No bounding boxes needed - just classifies the image
-    
-    Args:
-        file: Image file (JPG, PNG, JPEG)
-        user_id: Optional user identifier for tracking
-        
-    Returns:
-        JSON response with classification and user_id (class_name, confidence, user_id)
+    Classification-only endpoint - Returns class name and confidence.
+    If user_id is provided, prediction is saved and prediction_id is returned (for feedback).
     """
-    # Process image
-    result = await process_image(file, user_id=user_id)
-    
-    # Check if processing was successful
+    image_bytes = await file.read()
+    result = await process_image_from_bytes(
+        image_bytes, filename=file.filename or "image.jpg", user_id=user_id
+    )
     if not result.get("success", False):
         raise HTTPException(
             status_code=400,
-            detail=result.get("error", "Unknown error occurred")
+            detail=result.get("error", "Unknown error occurred"),
         )
-    
-    # Extract only classification info (no bounding boxes)
+
     detections = result.get("detections", [])
     user_id_result = result.get("user_id", user_id)
-    
+
     if not detections:
-        # No detections found
-        return JSONResponse(content={
-            "user_id": user_id_result,
-            "class_name": "No detection",
-            "confidence": 0.0
-        })
-    
-    # Aggregate detections by class for better classification accuracy
-    if detections:
-        # Group by class: collect all confidences per class
-        class_detections = {}
-        for det in detections:
-            class_name = det["class_name"]
-            confidence = det["confidence"]
-            
-            if class_name not in class_detections:
-                class_detections[class_name] = []
-            class_detections[class_name].append(confidence)
-        
-        # For classification: Use MAX confidence per class (not average)
-        # Reason: When tiling, each tile might have lower confidence
-        # Using MAX captures the best detection per class
-        class_max_confidences = {}
-        for class_name, confidences in class_detections.items():
-            max_confidence = max(confidences)
-            count = len(confidences)
-            # Weighted score: max confidence with small boost for multiple detections
-            # This favors classes detected in multiple tiles
-            weighted_score = max_confidence * (1 + 0.05 * min(count, 5))  # Cap boost at 5 detections
-            class_max_confidences[class_name] = {
-                "confidence": max_confidence,
-                "count": count,
-                "weighted_score": weighted_score
-            }
-        
-        # Get class with highest weighted score
-        best_class = max(class_max_confidences.items(), key=lambda x: x[1]["weighted_score"])
-        
-        classification = {
-            "user_id": user_id_result,
-            "class_name": best_class[0],
-            "confidence": float(best_class[1]["confidence"])
+        out = {"user_id": user_id_result, "class_name": "No detection", "confidence": 0.0}
+        return JSONResponse(content=out)
+
+    class_detections = {}
+    for det in detections:
+        c, conf = det["class_name"], det["confidence"]
+        class_detections.setdefault(c, []).append(conf)
+    class_max_confidences = {}
+    for class_name, confidences in class_detections.items():
+        max_c = max(confidences)
+        n = len(confidences)
+        class_max_confidences[class_name] = {
+            "confidence": max_c,
+            "count": n,
+            "weighted_score": max_c * (1 + 0.05 * min(n, 5)),
         }
-    else:
-        classification = {
-            "user_id": user_id_result,
-            "class_name": "No detection",
-            "confidence": 0.0
-        }
-    
-    # Return clean, simple JSON response with user_id
+    best_class = max(class_max_confidences.items(), key=lambda x: x[1]["weighted_score"])
+    classification = {
+        "user_id": user_id_result,
+        "class_name": best_class[0],
+        "confidence": float(best_class[1]["confidence"]),
+    }
+
+    if user_id and detections:
+        try:
+            best_det = max(detections, key=lambda d: d["confidence"])
+            prediction_id = save_prediction(
+                db,
+                image_bytes,
+                file.filename or "image.jpg",
+                user_id,
+                best_det,
+                inference_time_ms=None,
+                user_location=user_location,
+            )
+            classification["prediction_id"] = prediction_id
+        except Exception:
+            pass
+
     return JSONResponse(content=classification)
 
 

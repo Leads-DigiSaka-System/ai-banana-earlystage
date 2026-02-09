@@ -17,3 +17,10 @@ numpy
 pydantic
 python-dotenv
 
+# Database (feedback enhancement + scripts/setup_database.py)
+psycopg2-binary
+sqlalchemy>=2.0
+
+# Tests
+pytest>=7.0
+

@@ -41,3 +41,6 @@ MAX_IMAGE_MEMORY_MB = 50  # Maximum image size in MB (safety limit)
 HOST = "0.0.0.0"
 PORT = 8000
 
+# Phase 2 (MinIO): configured via env (STORAGE_ENDPOINT, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY).
+# See services/storage_service.py and .env.example.
+

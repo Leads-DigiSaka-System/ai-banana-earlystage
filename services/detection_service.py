@@ -8,6 +8,16 @@ from services.image_processing import preprocess_image
 from services.inference import run_inference
 
 
+class _BytesUpload:
+    """File-like so we can run process_image from in-memory bytes (e.g. after read for feedback save)."""
+    def __init__(self, data: bytes, filename: str = "image.jpg"):
+        self._data = data
+        self.filename = filename
+
+    async def read(self) -> bytes:
+        return self._data
+
+
 async def process_image(file, user_id: Optional[str] = None) -> Dict:
     """
     Simple classification - Run inference once and return detections
@@ -59,4 +69,11 @@ async def process_image(file, user_id: Optional[str] = None) -> Dict:
             "error": f"Processing error: {str(e)}",
             "user_id": user_id
         }
+
+
+async def process_image_from_bytes(
+    image_bytes: bytes, filename: str = "image.jpg", user_id: Optional[str] = None
+) -> Dict:
+    """Same as process_image but takes bytes (so caller can reuse bytes e.g. for saving)."""
+    return await process_image(_BytesUpload(image_bytes, filename), user_id=user_id)
 
