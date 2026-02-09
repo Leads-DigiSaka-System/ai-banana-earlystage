@@ -16,17 +16,32 @@ from services.inference import load_model
 router = APIRouter(prefix="/api/v1", tags=["detection"])
 
 
-@router.post("/predict")
+@router.post(
+    "/predict",
+    summary="Full detection with bounding boxes",
+    description="""
+**How to use:** Send the image as **form-data** (multipart).
+
+- **file** (required): Image file — JPG, PNG, or JPEG.
+- **user_id** (optional): If you send this, the prediction is saved and the response includes **prediction_id**. Use that ID later to submit feedback (POST /api/v1/feedback/submit).
+- **user_location** (optional): e.g. city or region.
+
+**Response:** Detections with class_name, confidence, and bbox. If you sent `user_id`, you also get `prediction_id` — copy it for the feedback API.
+
+**Example (curl):**
+```
+curl -X POST "http://localhost:8000/api/v1/predict" \\
+  -F "file=@leaf.jpg" \\
+  -F "user_id=my_app_user_123"
+```
+    """,
+)
 async def predict(
-    file: UploadFile = File(...),
-    user_id: Optional[str] = Form(None),
-    user_location: Optional[str] = Form(None),
+    file: UploadFile = File(..., description="Image file (JPG, PNG, JPEG)"),
+    user_id: Optional[str] = Form(None, description="Optional. If set, prediction is saved and response includes prediction_id for feedback."),
+    user_location: Optional[str] = Form(None, description="Optional location (e.g. city)."),
     db: Session = Depends(get_db),
 ):
-    """
-    Main prediction endpoint - Full detection with bounding boxes.
-    If user_id is provided, prediction is saved and prediction_id is returned (for feedback).
-    """
     image_bytes = await file.read()
     result = await process_image_from_bytes(
         image_bytes, filename=file.filename or "image.jpg", user_id=user_id
@@ -56,17 +71,32 @@ async def predict(
     return JSONResponse(content=result)
 
 
-@router.post("/predict/classify")
+@router.post(
+    "/predict/classify",
+    summary="Classification only (no bounding boxes)",
+    description="""
+**How to use:** Send the image as **form-data** (multipart).
+
+- **file** (required): Image file — JPG, PNG, or JPEG.
+- **user_id** (optional): If you send this, the prediction is saved and the response includes **prediction_id** for feedback.
+- **user_location** (optional): e.g. city or region.
+
+**Response:** Single class (class_name, confidence). If you sent `user_id`, you also get `prediction_id` — use it when calling POST /api/v1/feedback/submit.
+
+**Example (curl):**
+```
+curl -X POST "http://localhost:8000/api/v1/predict/classify" \\
+  -F "file=@leaf.jpg" \\
+  -F "user_id=my_app_user_123"
+```
+    """,
+)
 async def predict_classify(
-    file: UploadFile = File(...),
-    user_id: Optional[str] = Form(None),
-    user_location: Optional[str] = Form(None),
+    file: UploadFile = File(..., description="Image file (JPG, PNG, JPEG)"),
+    user_id: Optional[str] = Form(None, description="Optional. If set, response includes prediction_id for feedback."),
+    user_location: Optional[str] = Form(None, description="Optional location."),
     db: Session = Depends(get_db),
 ):
-    """
-    Classification-only endpoint - Returns class name and confidence.
-    If user_id is provided, prediction is saved and prediction_id is returned (for feedback).
-    """
     image_bytes = await file.read()
     result = await process_image_from_bytes(
         image_bytes, filename=file.filename or "image.jpg", user_id=user_id
@@ -123,21 +153,19 @@ async def predict_classify(
     return JSONResponse(content=classification)
 
 
-@router.post("/predict/classify/debug")
+@router.post(
+    "/predict/classify/debug",
+    summary="Debug: all detections (low threshold)",
+    description="""
+**How to use:** Same as /predict/classify — form-data with **file** and optional **user_id**.
+
+Returns **all** detections with a very low confidence threshold (0.01) so you can see weak detections. Use for debugging only, not for production.
+    """,
+)
 async def predict_classify_debug(
-    file: UploadFile = File(...),
-    user_id: Optional[str] = Form(None)
+    file: UploadFile = File(..., description="Image file (JPG, PNG, JPEG)"),
+    user_id: Optional[str] = Form(None, description="Optional user identifier."),
 ):
-    """
-    Debug endpoint - Shows all detections with very low threshold to diagnose issues
-    
-    Args:
-        file: Image file (JPG, PNG, JPEG)
-        user_id: Optional user identifier for tracking
-        
-    Returns:
-        JSON response with all detections (even low confidence) and user_id
-    """
     from services.image_processing import preprocess_image
     from services.inference import run_inference
     

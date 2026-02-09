@@ -19,14 +19,40 @@ router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
     "/submit",
     summary="Submit feedback for a prediction",
     description="""
-**Para saan:** I-submit kung tama o mali ang prediction.
+**How to use:** Send a **JSON body** (Content-Type: application/json). No form-data; no `user_id` here.
 
-**Kailangan:** `prediction_id` (from /predict or /predict/classify response when you sent `user_id`), at `is_correct` (true/false).
+**Step 1 — Get a prediction_id:**  
+Call **POST /api/v1/predict** or **POST /api/v1/predict/classify** and include **user_id** in the form. The response will contain **prediction_id**.
 
-**Kung mali ang prediction:** Pwede mong isama ang `correct_class_name` (e.g. "Stage3") at optional `correct_class_id` (3). 
-Ire-record ito at pwedeng gamitin para sa retraining.
+**Step 2 — Submit feedback:**  
+Call this endpoint with that `prediction_id` and `is_correct` (true/false). Optionally add correct class or comment.
 
-**Optional:** `user_comment`, `confidence_rating` (1–5).
+**Required in body:**
+- **prediction_id** (string): UUID from the predict response.
+- **is_correct** (boolean): `true` if the prediction was right, `false` if wrong.
+
+**Optional in body (when wrong):**
+- **correct_class_name** (string): e.g. `"Stage3"` — used for retraining.
+- **correct_class_id** (integer): 0–6.
+
+**Optional in body (any time):**
+- **user_comment** (string): Free text.
+- **confidence_rating** (integer): 1–5 (how sure the user is).
+
+**Example — correct prediction:**
+```json
+{"prediction_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", "is_correct": true}
+```
+
+**Example — wrong prediction (with correct class):**
+```json
+{
+  "prediction_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+  "is_correct": false,
+  "correct_class_name": "Stage3",
+  "correct_class_id": 3
+}
+```
     """,
 )
 async def feedback_submit(
@@ -57,10 +83,13 @@ async def feedback_submit(
     "/stats",
     summary="Feedback statistics (accuracy from users)",
     description="""
-**Para saan:** Makita ang accuracy ng model batay sa feedback (ilang tama vs mali), 
-per class stats, at feedback rate.
+**How to use:** GET with optional query parameters. No request body.
 
-**Query params:** `days` (default 7) = last N days; `model_version` = filter by version.
+**Query parameters:**
+- **days** (default: 7): Last N days of data. Min 1, max 365.
+- **model_version** (optional): Filter by model version string.
+
+**Response:** Overall accuracy, total predictions, total feedback, correct/incorrect counts, feedback rate, and per-class statistics (accuracy per class).
     """,
 )
 async def feedback_stats(
