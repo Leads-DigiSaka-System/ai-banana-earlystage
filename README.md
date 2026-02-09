@@ -36,6 +36,8 @@ This project implements an end-to-end machine learning pipeline for agricultural
 - **Multi-stage Classification**: Detects 7 disease progression stages
 - **Real-time Inference**: Fast API response times with optimized model serving
 - **Image Tiling**: Handles high-resolution images through intelligent tiling
+- **Feedback Collection**: Submit correct/incorrect feedback per prediction; stats and accuracy from user feedback
+- **Data Storage**: PostgreSQL for predictions, feedback, training_data; optional MinIO for image storage
 - **Production Ready**: Docker deployment with health checks and monitoring
 
 ---
@@ -112,8 +114,10 @@ This project implements an end-to-end machine learning pipeline for agricultural
 3. **API Endpoints**
    - Full detection with bounding boxes
    - Classification-only endpoint
+   - Feedback: submit (correct/wrong + optional correct class), stats (accuracy, per-class)
+   - Database CRUD: predictions, feedback, training_data, model_performance (list/get/patch/delete)
    - Health monitoring and model information
-   - User tracking support
+   - User tracking support (optional `user_id` returns `prediction_id` for feedback)
 
 4. **Production Features**
    - Docker containerization
@@ -138,6 +142,11 @@ This project implements an end-to-end machine learning pipeline for agricultural
 - Trained YOLO model weights (`best.pt`) in `models/weights/` directory
 - Model should be trained on 736x736 input size
 - Model should support 7 classes (Healthy, Stage1-6)
+
+### Optional (Feedback & Storage)
+
+- **PostgreSQL**: For saving predictions and feedback (see `.env.example`). Use `scripts/setup_database.py` to create DB and tables.
+- **MinIO**: For object storage of prediction images. If `STORAGE_ENDPOINT` is not set, images are stored locally under `data/uploads/predictions/`.
 
 ---
 
@@ -225,7 +234,21 @@ with open('banana_leaf.jpg', 'rb') as f:
     print(response.json())
 ```
 
-### 4. Access API Documentation
+When `user_id` is provided, the response includes `prediction_id` (for feedback).
+
+### 4. Submit Feedback (optional, requires PostgreSQL)
+
+```bash
+# After a prediction that returned prediction_id:
+curl -X POST "http://localhost:8000/api/v1/feedback/submit" \
+  -H "Content-Type: application/json" \
+  -d '{"prediction_id": "<prediction_id>", "is_correct": false, "correct_class_name": "Stage3"}'
+
+# Get feedback stats
+curl "http://localhost:8000/api/v1/feedback/stats?days=7"
+```
+
+### 5. Access API Documentation
 
 Open `http://localhost:8000/docs` in your browser for interactive API documentation.
 
@@ -332,7 +355,45 @@ Get disease classification without bounding boxes (simplified output).
 }
 ```
 
-#### 5. Debug Endpoint
+#### 5. Feedback Submit
+
+**POST** `/api/v1/feedback/submit`
+
+Submit user feedback for a prediction (requires DB). Use `prediction_id` from `/predict` or `/predict/classify` when `user_id` was sent.
+
+**Request body (JSON):**
+- `prediction_id` (required): UUID from prediction response
+- `is_correct` (required): `true` or `false`
+- `correct_class_name` (optional): e.g. `"Stage3"` when wrong
+- `correct_class_id` (optional): e.g. `3`
+- `user_comment` (optional): Free text
+- `confidence_rating` (optional): 1–5
+
+**Response:**
+```json
+{
+  "success": true,
+  "feedback_id": "uuid",
+  "message": "Thank you for your feedback!"
+}
+```
+
+#### 6. Feedback Stats
+
+**GET** `/api/v1/feedback/stats?days=7&model_version=`
+
+Returns accuracy and per-class statistics from feedback. Query params: `days` (default 7), `model_version` (optional).
+
+#### 7. Database CRUD
+
+- **GET** `/api/v1/db/predictions` — List/search predictions
+- **GET** `/api/v1/db/predictions/{id}` — Get one prediction
+- **PATCH** `/api/v1/db/predictions/{id}` — Update prediction
+- **DELETE** `/api/v1/db/predictions/{id}` — Delete prediction
+
+Same pattern for `/api/v1/db/training-data`, `/api/v1/db/model-performance`, `/api/v1/db/feedback`. See interactive docs at `/docs`.
+
+#### 8. Debug Endpoint
 
 **POST** `/api/v1/predict/classify/debug`
 
@@ -477,13 +538,41 @@ MAX_IMAGE_MEMORY_MB = 50  # Maximum file size in MB
 
 ### Environment Variables
 
-Create a `.env` file (optional) to override defaults:
+Copy `.env.example` to `.env` and fill in values. Key variables:
 
 ```env
+# Server (optional)
 HOST=0.0.0.0
 PORT=8000
-MODEL_PATH=models/weights/best.pt
-MODEL_CONFIDENCE=0.25
+
+# PostgreSQL (for feedback & predictions storage)
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5433
+POSTGRES_DB=ai_banana_early_stage
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_password
+
+# MinIO (optional; if unset, images stored under data/uploads/predictions/)
+STORAGE_ENDPOINT=localhost:9000
+STORAGE_ACCESS_KEY=minioadmin
+STORAGE_SECRET_KEY=minioadmin123
+STORAGE_SECURE=false
+STORAGE_BUCKET=ai-banana-early-stage
+```
+
+Run `scripts/setup_database.py` to create the database and tables when using feedback features.
+
+### Running Tests
+
+```bash
+# Install dev deps (includes pytest, httpx)
+uv sync
+
+# Run all unit tests
+uv run pytest tests/unit/ -v
+
+# Run specific test modules
+uv run pytest tests/unit/test_feedback_service.py tests/unit/test_storage_service.py -v
 ```
 
 ---
@@ -558,38 +647,52 @@ For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYME
 ai-banana-earlystage/
 ├── Data/                          # Raw image data
 │   └── Sigatoka pics/
-│       ├── Stage1/
-│       ├── Stage2/
-│       └── Stage3/
+├── data/uploads/predictions/      # Local prediction images (when MinIO not used)
+├── database/                      # DB connection & models
+│   ├── connection.py             # get_db, session
+│   ├── models.py                 # Prediction, Feedback, TrainingData
+│   └── model_performance.py      # ModelPerformance
+├── docs/                          # Documentation
+│   ├── PHASE_CONNECTION_CHECKLIST.md
+│   ├── ENHANCEMENT_1_IMPLEMENTATION_STATUS.md
+│   └── enhancement/implementation/  # Enhancement 1–5 guides
 ├── notebook/                      # Jupyter notebooks for training
-│   ├── data-labeling-classification.ipynb  # Preprocessing
-│   ├── bsed-datasets-merge.ipynb            # Dataset merging
-│   └── bsed-training.ipynb                  # Model training
-├── services/                      # Core service modules
-│   ├── detection_service.py       # Main detection logic
-│   ├── inference.py               # Model inference
-│   ├── image_processing.py        # Image preprocessing
-│   ├── validation.py              # Input validation
-│   └── formatting.py              # Response formatting
+│   ├── data-labeling-classification.ipynb
+│   ├── bsed-datasets-merge.ipynb
+│   └── bsed-training.ipynb
 ├── router/                        # API routes
-│   └── process.py                 # API endpoints
-├── models/                        # Model storage
-│   └── weights/
-│       ├── best.pt                # Best model weights
-│       └── last.pt                # Last epoch weights
-├── analysis/                      # Analysis results
-├── visual/                        # Training visualizations
-├── logs/                          # Application logs
-├── main.py                        # FastAPI application entry point
-├── config.py                      # Configuration settings
-├── requirements.txt               # Python dependencies
-├── pyproject.toml                 # Project metadata
-├── Dockerfile                     # Docker image definition
-├── docker-compose.yml             # Docker Compose configuration
+│   ├── process.py                # /api/v1/predict, /predict/classify
+│   ├── feedback.py               # /api/v1/feedback/submit, /stats
+│   └── database_crud.py          # /api/v1/db/* (predictions, feedback, etc.)
+├── schemas/                       # Pydantic request/response
+│   └── feedback.py               # FeedbackSubmitRequest
+├── services/                      # Core service modules
+│   ├── detection_service.py      # Main detection logic
+│   ├── inference.py              # Model inference
+│   ├── feedback_service.py       # save_prediction, save_feedback, get_feedback_stats
+│   ├── storage_service.py        # MinIO/local image storage, read_image_bytes
+│   ├── image_processing.py       # Image preprocessing
+│   ├── validation.py             # Input validation
+│   └── formatting.py             # Response formatting
+├── scripts/                       # DB & utility scripts
+│   ├── setup_database.py         # Create DB and tables
+│   └── export_feedback_for_training.py  # TODO: export for retraining
+├── tests/unit/                    # Unit tests
+│   ├── test_feedback_service.py
+│   ├── test_feedback_schemas.py
+│   ├── test_storage_service.py
+│   └── test_database_crud.py
+├── models/weights/               # Model storage (best.pt, last.pt)
+├── main.py                        # FastAPI app entry
+├── config.py                      # Configuration
+├── pyproject.toml                 # Project metadata & deps
+├── .env.example                   # Env template (Postgres, MinIO)
+├── Dockerfile
+├── docker-compose.yml
 ├── README.md                      # This file
-├── WORKFLOW_DOCUMENTATION.md      # Detailed workflow guide
-├── DOCKER_DEPLOYMENT.md           # Docker deployment guide
-└── BUILD_LOCAL.md                 # Local build instructions
+├── DOCKER_DEPLOYMENT.md
+├── DOCKER_TROUBLESHOOTING.md
+└── BUILD_LOCAL.md
 ```
 
 ---
@@ -598,20 +701,12 @@ ai-banana-earlystage/
 
 ### Additional Documentation
 
-- **[WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md)**: Comprehensive workflow documentation covering:
-  - Complete preprocessing pipeline
-  - Hyperparameter tuning guide
-  - Training process details
-  - Validation and testing procedures
-  - Data split specifications
-
-- **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**: Docker deployment guide with:
-  - Dockerfile explanation
-  - Docker Compose setup
-  - Production deployment tips
-  - Troubleshooting guide
-
-- **[BUILD_LOCAL.md](BUILD_LOCAL.md)**: Local build and testing instructions
+- **[docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md](docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md)**: Status of Feedback Collection implementation vs enhancement doc; router and API summary.
+- **[docs/PHASE_CONNECTION_CHECKLIST.md](docs/PHASE_CONNECTION_CHECKLIST.md)**: How predict → save → feedback → storage connect; use of `read_image_bytes` for export.
+- **Enhancement guides** (docs/enhancement/implementation/): ENHANCEMENT_1 (Feedback), ENHANCEMENT_2 (MLOps), ENHANCEMENT_3 (DevOps/CI-CD), ENHANCEMENT_4 (Training), ENHANCEMENT_5 (Monitoring).
+- **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**: Docker deployment (Dockerfile, Compose, production tips).
+- **[DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHOOTING.md)**: Docker troubleshooting.
+- **[BUILD_LOCAL.md](BUILD_LOCAL.md)**: Local build and testing instructions.
 
 ---
 
@@ -743,4 +838,5 @@ For more troubleshooting help, see [DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHO
 
 ---
 
-**For detailed workflow and training instructions, please refer to [WORKFLOW_DOCUMENTATION.md](WORKFLOW_DOCUMENTATION.md)**
+**Interactive API docs:** `http://localhost:8000/docs`  
+**For feedback/data flow:** see [docs/PHASE_CONNECTION_CHECKLIST.md](docs/PHASE_CONNECTION_CHECKLIST.md) and [docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md](docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md).
