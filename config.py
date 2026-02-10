@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Model Configuration
 MODEL_PATH = Path("models/weights/best.pt")  # Update this path to your trained model
-MODEL_CONFIDENCE = 0.25  # Confidence threshold (0.0 - 1.0) - Lowered to catch more disease detections
+MODEL_CONFIDENCE = 0.45  # Confidence threshold (0.0 - 1.0). Higher = fewer false positives, better output quality
 MODEL_IOU = 0.7  # IoU threshold for NMS
 MODEL_IMAGE_SIZE = 736  # Image size for inference - MUST match training size (imgsz=736) for best accuracy
 # Note: YOLO automatically resizes any uploaded image to this size during inference

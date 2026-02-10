@@ -1,7 +1,7 @@
 # Request/response schemas for feedback API.
 
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class FeedbackSubmitRequest(BaseModel):
@@ -11,6 +11,13 @@ class FeedbackSubmitRequest(BaseModel):
         ...,
         description="UUID of the prediction (from /predict or /predict/classify response when you sent user_id).",
     )
+
+    @field_validator("prediction_id", mode="before")
+    @classmethod
+    def normalize_prediction_id(cls, v):
+        if isinstance(v, str):
+            return v.strip()
+        return v
     is_correct: bool = Field(
         ...,
         description="True if the prediction was correct, false if wrong.",

@@ -3,6 +3,7 @@ Feedback enhancement: save predictions, save feedback, stats.
 Uses PostgreSQL; prediction images: MinIO (Phase 2) if configured, else local disk.
 """
 import hashlib
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,13 +34,14 @@ def save_prediction(
     model_name: str = MODEL_NAME,
     inference_time_ms: Optional[float] = None,
     user_location: Optional[str] = None,
+    prediction_id: Optional[str] = None,
 ) -> str:
     """
     Save image to MinIO (if configured) or local disk, then insert prediction row.
-    Returns prediction_id (UUID string).
+    Returns prediction_id (UUID string). Pass prediction_id to use a specific UUID (e.g. from router).
     prediction_result: at least class_id, class_name, confidence; optional bbox.
     """
-    prediction_id = uuid.uuid4()
+    prediction_id = uuid.UUID(prediction_id) if prediction_id else uuid.uuid4()
     image_hash = hashlib.sha256(image_bytes).hexdigest()
     ext = Path(filename).suffix.lower() or ".jpg"
     if ext not in (".jpg", ".jpeg", ".png"):
@@ -58,17 +60,24 @@ def save_prediction(
     except Exception:
         client = None
 
+    image_path = None
     if client is not None:
-        ensure_buckets(client)
-        image_path = upload_prediction_image(
-            client,
-            image_bytes,
-            user_id=user_id,
-            prediction_id=str(prediction_id),
-            image_hash_prefix=image_hash,
-            file_extension=ext_clean,
-        )
-    else:
+        try:
+            ensure_buckets(client)
+            image_path = upload_prediction_image(
+                client,
+                image_bytes,
+                user_id=user_id,
+                prediction_id=str(prediction_id),
+                image_hash_prefix=image_hash,
+                file_extension=ext_clean,
+            )
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                "MinIO upload failed, saving image locally: %s", e
+            )
+            image_path = None
+    if image_path is None:
         _ensure_uploads_dir()
         path = UPLOADS_DIR / f"{prediction_id}{ext}"
         path.write_bytes(image_bytes)
@@ -113,14 +122,23 @@ def save_feedback(
     feedback_source: str = "api",
 ) -> str:
     """Save feedback row. Optionally add to training_data if wrong. Returns feedback_id."""
+    raw = (prediction_id or "").strip()
+    if not raw:
+        raise ValueError("prediction_id is required")
     try:
-        pid = uuid.UUID(prediction_id)
+        pid = uuid.UUID(raw)
     except ValueError:
-        raise ValueError("Invalid prediction_id")
+        raise ValueError("Invalid prediction_id (must be a valid UUID)")
 
     prediction = db.query(Prediction).filter(Prediction.id == pid).first()
     if not prediction:
-        raise ValueError("Prediction not found")
+        log = logging.getLogger(__name__)
+        log.warning("Prediction not found: id=%s (UUID=%s). Check same DB and that predict saved.", raw, pid)
+        raise ValueError(
+            f"Prediction not found for id {raw}. "
+            "Use the prediction_id from the predict response (same request that returned it). "
+            "If you just predicted, ensure the API saved it (response must include prediction_id)."
+        )
 
     if confidence_rating is not None and (confidence_rating < 1 or confidence_rating > 5):
         raise ValueError("confidence_rating must be 1-5")

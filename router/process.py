@@ -1,6 +1,8 @@
 """
 API Router for Banana Disease Detection endpoints
 """
+import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -53,9 +55,10 @@ async def predict(
         )
 
     if user_id and result.get("detections"):
+        prediction_id = str(uuid.uuid4())
         try:
             best = max(result["detections"], key=lambda d: d["confidence"])
-            prediction_id = save_prediction(
+            save_prediction(
                 db,
                 image_bytes,
                 file.filename or "image.jpg",
@@ -63,10 +66,11 @@ async def predict(
                 best,
                 inference_time_ms=None,
                 user_location=user_location,
+                prediction_id=prediction_id,
             )
             result["prediction_id"] = prediction_id
-        except Exception:
-            pass  # DB save optional; response still has detections
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to save prediction for feedback: %s", e)
 
     return JSONResponse(content=result)
 
@@ -111,33 +115,31 @@ async def predict_classify(
     user_id_result = result.get("user_id", user_id)
 
     if not detections:
-        out = {"user_id": user_id_result, "class_name": "No detection", "confidence": 0.0}
+        out = {
+            "user_id": user_id_result,
+            "class_name": "No detection",
+            "confidence": 0.0,
+            "reliable": False,
+        }
         return JSONResponse(content=out)
 
-    class_detections = {}
-    for det in detections:
-        c, conf = det["class_name"], det["confidence"]
-        class_detections.setdefault(c, []).append(conf)
-    class_max_confidences = {}
-    for class_name, confidences in class_detections.items():
-        max_c = max(confidences)
-        n = len(confidences)
-        class_max_confidences[class_name] = {
-            "confidence": max_c,
-            "count": n,
-            "weighted_score": max_c * (1 + 0.05 * min(n, 5)),
-        }
-    best_class = max(class_max_confidences.items(), key=lambda x: x[1]["weighted_score"])
+    # Use the single detection with highest confidence as the classification result.
+    # This avoids many weak detections (e.g. Stage5) outweighing one strong detection (e.g. Stage1).
+    best_det = max(detections, key=lambda d: d["confidence"])
+    best_conf = float(best_det["confidence"])
+    # Hint for accuracy: treat as reliable when confidence >= 0.5 (configurable threshold)
+    CONFIDENCE_RELIABLE_THRESHOLD = 0.5
     classification = {
         "user_id": user_id_result,
-        "class_name": best_class[0],
-        "confidence": float(best_class[1]["confidence"]),
+        "class_name": best_det["class_name"],
+        "confidence": best_conf,
+        "reliable": best_conf >= CONFIDENCE_RELIABLE_THRESHOLD,
     }
 
     if user_id and detections:
+        prediction_id = str(uuid.uuid4())
         try:
-            best_det = max(detections, key=lambda d: d["confidence"])
-            prediction_id = save_prediction(
+            save_prediction(
                 db,
                 image_bytes,
                 file.filename or "image.jpg",
@@ -145,10 +147,11 @@ async def predict_classify(
                 best_det,
                 inference_time_ms=None,
                 user_location=user_location,
+                prediction_id=prediction_id,
             )
             classification["prediction_id"] = prediction_id
-        except Exception:
-            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning("Failed to save prediction for feedback: %s", e)
 
     return JSONResponse(content=classification)
 
