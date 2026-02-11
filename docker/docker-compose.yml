@@ -1,3 +1,4 @@
+# App stack: prefix "banana-" so you can tell it apart from mlops_* containers.
 services:
   api:
     build: .
