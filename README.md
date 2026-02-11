@@ -489,6 +489,8 @@ The model training process consists of three main phases:
 - `last.pt`: Final epoch weights
 - Training metrics and visualizations in `runs/detect/`
 
+**Programmatic retrain (export feedback → train with MLflow):** Use `scripts/run_retrain.py` and `training/train_with_mlflow.py`. See [Phase 3 Integration](docs/enhancement/implementation/PHASE3_INTEGRATION.md) for usage and scheduling (cron, Task Scheduler).
+
 ### Data Split Strategy
 
 **Proportions:** 70% Training / 15% Validation / 15% Test
@@ -676,7 +678,8 @@ ai-banana-earlystage/
 │   └── formatting.py             # Response formatting
 ├── scripts/                       # DB & utility scripts
 │   ├── setup_database.py         # Create DB and tables
-│   └── export_feedback_for_training.py  # TODO: export for retraining
+│   ├── export_feedback_for_training.py  # Export feedback to YOLO dataset (see Phase 3)
+│   └── run_retrain.py                   # Retrain with MLflow (export + train)
 ├── tests/unit/                    # Unit tests
 │   ├── test_feedback_service.py
 │   ├── test_feedback_schemas.py
@@ -701,6 +704,7 @@ ai-banana-earlystage/
 
 ### Additional Documentation
 
+- **[docs/PROJECT_GAPS_AND_DOCUMENTATION.md](docs/PROJECT_GAPS_AND_DOCUMENTATION.md)**: MLOps/ML engineering gap analysis and documentation checklist (what to add or document).
 - **[docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md](docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md)**: Status of Feedback Collection implementation vs enhancement doc; router and API summary.
 - **[docs/PHASE_CONNECTION_CHECKLIST.md](docs/PHASE_CONNECTION_CHECKLIST.md)**: How predict → save → feedback → storage connect; use of `read_image_bytes` for export.
 - **Enhancement guides** (docs/enhancement/implementation/): ENHANCEMENT_1 (Feedback), ENHANCEMENT_2 (MLOps), ENHANCEMENT_3 (DevOps/CI-CD), ENHANCEMENT_4 (Training), ENHANCEMENT_5 (Monitoring).
