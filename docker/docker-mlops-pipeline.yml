@@ -34,7 +34,8 @@ services:
     image: quay.io/minio/minio:latest
     container_name: mlops_minio
     ports:
-      - "9011:9001"   # console only
+      - "9002:9000"   # S3 API (host 9002 to avoid conflict with other MinIO/apps)
+      - "9011:9001"   # Web console
     environment:
       MINIO_ROOT_USER: admin
       MINIO_ROOT_PASSWORD: banana123

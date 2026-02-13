@@ -1,0 +1,10 @@
+# DVC remote (Phase 4). Use MinIO S3 for dataset storage.
+# From host: endpointurl = http://localhost:9002
+# From Docker (Airflow): set endpointurl = http://host.docker.internal:9002
+[core]
+remote = minio
+
+['remote "minio"']
+url = s3://dvc-data/
+# Override in env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, DVC_ENDPOINT_URL
+# e.g. export DVC_ENDPOINT_URL=http://localhost:9002

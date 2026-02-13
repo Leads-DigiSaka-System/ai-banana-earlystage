@@ -25,3 +25,8 @@ dependencies = [
     "boto3>=1.42.46",
     "pyyaml>=6.0.3",
 ]
+
+[project.optional-dependencies]
+airflow = ["apache-airflow>=3.1.0,<3.2"]
+# Phase 4: DVC for data versioning (optional)
+dvc = ["dvc[s3]>=3.0.0"]

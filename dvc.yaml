@@ -1,0 +1,7 @@
+# DVC pipeline (Phase 4 – data versioning).
+# Track dataset: dvc add Data/combined_yolo_dataset
+# Push:        dvc push
+# Pull (e.g. in Airflow): dvc pull
+# Remote: .dvc/config (minio S3).
+
+stages: {}

@@ -135,3 +135,66 @@ class MLflowManager:
             version=version,
             stage=stage,
         )
+
+    def download_model_weights(
+        self,
+        registered_model_name: str,
+        stage: str = "Production",
+        artifact_path: str = "model",
+        dest_dir: Optional[Path] = None,
+    ) -> Optional[Path]:
+        """
+        Download model artifact (e.g. best.pt) from a registered model version.
+        Phase 4: used for fine-tuning (use as base_model) or production deploy.
+
+        Returns:
+            Path to best.pt in dest_dir, or None if no model in stage.
+        """
+        version_info = self.get_best_model(
+            registered_model_name=registered_model_name,
+            stage=stage,
+        )
+        if not version_info:
+            return None
+        if dest_dir is None:
+            dest_dir = Path("/tmp/mlflow_download")
+        dest_dir = Path(dest_dir)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            import mlflow.artifacts
+            local_path = mlflow.artifacts.download_artifacts(
+                run_id=version_info.run_id,
+                artifact_path=artifact_path,
+                dst_path=str(dest_dir),
+            )
+        except Exception:
+            # Fallback: client download
+            client = mlflow.tracking.MlflowClient()
+            local_path = client.download_artifacts(
+                version_info.run_id,
+                artifact_path,
+                str(dest_dir),
+            )
+        local_path = Path(local_path)
+        best_pt = local_path / "best.pt"
+        if best_pt.exists():
+            return best_pt
+        # Single file artifact
+        if local_path.suffix == ".pt":
+            return local_path
+        return None
+
+    def rollback_to_version(
+        self,
+        registered_model_name: str,
+        version: int,
+    ) -> None:
+        """
+        Phase 4: Promote an older model version to Production (rollback).
+        Current Production is moved to Archived.
+        """
+        self.promote_model(
+            registered_model_name=registered_model_name,
+            version=version,
+            stage="Production",
+        )

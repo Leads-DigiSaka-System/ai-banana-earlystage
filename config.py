@@ -1,10 +1,15 @@
 """
 Configuration file for Banana Disease Detection API
 """
+import os
 from pathlib import Path
 
 # Model Configuration
 MODEL_PATH = Path("models/weights/best.pt")  # Update this path to your trained model
+# Phase 4: A/B testing – optional path to Staging model; 0 = off
+_MODEL_PATH_STAGING = os.environ.get("MODEL_PATH_STAGING")
+MODEL_PATH_STAGING = Path(_MODEL_PATH_STAGING) if _MODEL_PATH_STAGING else None  # e.g. models/weights/staging.pt
+AB_TEST_STAGING_PERCENT = int(os.environ.get("AB_TEST_STAGING_PERCENT", "0"))  # 0-100
 MODEL_CONFIDENCE = 0.45  # Confidence threshold (0.0 - 1.0). Higher = fewer false positives, better output quality
 MODEL_IOU = 0.7  # IoU threshold for NMS
 MODEL_IMAGE_SIZE = 736  # Image size for inference - MUST match training size (imgsz=736) for best accuracy

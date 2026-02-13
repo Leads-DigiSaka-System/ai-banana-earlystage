@@ -1,12 +1,15 @@
 """
 Model inference utilities
 """
+import random
 from typing import List, Dict, Optional
 from ultralytics import YOLO
 import numpy as np
 
 from config import (
     MODEL_PATH,
+    MODEL_PATH_STAGING,
+    AB_TEST_STAGING_PERCENT,
     MODEL_CONFIDENCE,
     MODEL_IOU,
     MODEL_IMAGE_SIZE,
@@ -15,31 +18,52 @@ from config import (
 )
 from services.image_processing import tile_image
 
-# Global model variable (loaded once)
+# Global model variables (loaded once per path)
 _model: Optional[YOLO] = None
+_model_staging: Optional[YOLO] = None
 
 
 def load_model() -> YOLO:
     """
-    Load YOLO model (cached - only loads once)
-    
-    Returns:
-        YOLO: Loaded model instance
+    Load production YOLO model (cached - only loads once).
     """
     global _model
-    
     if _model is None:
         if not MODEL_PATH.exists():
             raise FileNotFoundError(
                 f"Model not found at {MODEL_PATH}. "
                 "Please copy your trained best.pt to the models/ folder."
             )
-        
         print(f"Loading model from {MODEL_PATH}...")
         _model = YOLO(str(MODEL_PATH))
         print("Model loaded successfully!")
-    
     return _model
+
+
+def _load_staging_model() -> Optional[YOLO]:
+    """Phase 4: Load staging model for A/B testing (cached)."""
+    global _model_staging
+    if MODEL_PATH_STAGING is None or not MODEL_PATH_STAGING.exists():
+        return None
+    if _model_staging is None:
+        print(f"Loading staging model from {MODEL_PATH_STAGING}...")
+        _model_staging = YOLO(str(MODEL_PATH_STAGING))
+        print("Staging model loaded.")
+    return _model_staging
+
+
+def get_model_for_request() -> YOLO:
+    """
+    Phase 4: Return production or staging model per A/B test percentage.
+    If AB_TEST_STAGING_PERCENT is 0 or staging path not set, always returns production.
+    """
+    if AB_TEST_STAGING_PERCENT <= 0 or MODEL_PATH_STAGING is None:
+        return load_model()
+    if random.randint(1, 100) <= AB_TEST_STAGING_PERCENT:
+        staging = _load_staging_model()
+        if staging is not None:
+            return staging
+    return load_model()
 
 
 def run_inference(image: np.ndarray, confidence_threshold: float = None, use_tiling: bool = None) -> List[Dict]:
@@ -54,8 +78,8 @@ def run_inference(image: np.ndarray, confidence_threshold: float = None, use_til
     Returns:
         List[Dict]: List of detection results
     """
-    # Load model
-    model = load_model()
+    # Load model (A/B: may use staging model)
+    model = get_model_for_request()
     
     # Use provided threshold or default
     conf_threshold = confidence_threshold if confidence_threshold is not None else MODEL_CONFIDENCE

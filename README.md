@@ -154,6 +154,8 @@ This project implements an end-to-end machine learning pipeline for agricultural
 
 ### Option 1: Docker Deployment (Recommended)
 
+**Which Compose file?** For the **detection API only**, use `docker/docker-compose.yml`. For the **MLOps stack** (MLflow + Postgres + MinIO for training/retrain), use `docker/docker-mlops-pipeline.yml`. See [Deployment](#deployment) and [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for ports.
+
 ```bash
 # Clone the repository
 git clone <repository-url>
@@ -162,11 +164,11 @@ cd ai-banana-earlystage
 # Ensure model weights are present
 ls models/weights/best.pt
 
-# Build and run with Docker Compose
-docker-compose up --build
+# Build and run the API (from project root)
+docker compose -f docker/docker-compose.yml up --build
 
 # Or run in background
-docker-compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ### Option 2: Local Installation
@@ -540,7 +542,7 @@ MAX_IMAGE_MEMORY_MB = 50  # Maximum file size in MB
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and fill in values. Key variables:
+Copy `.env.example` to `.env` and fill in values. For a full table (required/optional, used by which component), see [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md). Key variables:
 
 ```env
 # Server (optional)
@@ -583,20 +585,29 @@ uv run pytest tests/unit/test_feedback_service.py tests/unit/test_storage_servic
 
 ### Docker Deployment
 
+**Compose files (under `docker/`):**
+
+| File | Use case |
+|------|----------|
+| `docker/docker-compose.yml` | **Detection API** — run the FastAPI app (optionally with DB/MinIO if defined there). |
+| `docker/docker-mlops-pipeline.yml` | **MLOps stack** — MLflow server + Postgres + MinIO for training and run_retrain. Run with `docker compose -f docker/docker-mlops-pipeline.yml up -d`. |
+
+See [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md) for ports and [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md) for details.
+
 #### Using Docker Compose (Recommended)
 
 ```bash
-# Build and start
-docker-compose up --build
+# Build and start the API
+docker compose -f docker/docker-compose.yml up --build
 
 # Run in background
-docker-compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 
 # View logs
-docker-compose logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # Stop
-docker-compose down
+docker compose -f docker/docker-compose.yml down
 ```
 
 #### Using Docker Directly
@@ -704,10 +715,18 @@ ai-banana-earlystage/
 
 ### Additional Documentation
 
-- **[docs/PROJECT_GAPS_AND_DOCUMENTATION.md](docs/PROJECT_GAPS_AND_DOCUMENTATION.md)**: MLOps/ML engineering gap analysis and documentation checklist (what to add or document).
-- **[docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md](docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md)**: Status of Feedback Collection implementation vs enhancement doc; router and API summary.
+- **[docs/ENVIRONMENT.md](docs/ENVIRONMENT.md)**: Environment variables table (required/optional, ports).
+- **[docs/RUNBOOKS.md](docs/RUNBOOKS.md)**: Runbooks (API down, retrain failed, DB, MinIO, backup).
+- **[docs/MLFLOW_OPERATIONS.md](docs/MLFLOW_OPERATIONS.md)**: Promote model, deploy best.pt, rollback.
+- **[docs/DOCKER_COMPOSE_GUIDE.md](docs/DOCKER_COMPOSE_GUIDE.md)**: Which Compose file for API vs MLOps; port matrix.
+- **[docs/MODEL_SPEC.md](docs/MODEL_SPEC.md)**: Model contract (input size, classes, latency).
+- **[docs/PROJECT_GAPS_AND_DOCUMENTATION.md](docs/PROJECT_GAPS_AND_DOCUMENTATION.md)**: MLOps/ML engineering gap analysis and documentation checklist.
+- **[docs/TODO_LIST.md](docs/TODO_LIST.md)**: Prioritized todo list (P0–P3, enhancements).
+- **[docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md](docs/ENHANCEMENT_1_IMPLEMENTATION_STATUS.md)**: Status of Feedback Collection implementation; router and API summary.
 - **[docs/PHASE_CONNECTION_CHECKLIST.md](docs/PHASE_CONNECTION_CHECKLIST.md)**: How predict → save → feedback → storage connect; use of `read_image_bytes` for export.
-- **Enhancement guides** (docs/enhancement/implementation/): ENHANCEMENT_1 (Feedback), ENHANCEMENT_2 (MLOps), ENHANCEMENT_3 (DevOps/CI-CD), ENHANCEMENT_4 (Training), ENHANCEMENT_5 (Monitoring).
+- **Enhancement guides** (docs/enhancement/implementation/): ENHANCEMENT_1–5, PHASE3_INTEGRATION (export, retrain, scheduling).
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**: How to run tests, branch naming, PR checklist, code style. CI/CD planned (ENHANCEMENT_3).
+- **[CHANGELOG.md](CHANGELOG.md)**: Version history.
 - **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**: Docker deployment (Dockerfile, Compose, production tips).
 - **[DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHOOTING.md)**: Docker troubleshooting.
 - **[BUILD_LOCAL.md](BUILD_LOCAL.md)**: Local build and testing instructions.
@@ -784,10 +803,10 @@ netstat -ano | findstr :8000
 **Solution:**
 ```bash
 # Clean build without cache
-docker-compose build --no-cache
+docker compose -f docker/docker-compose.yml build --no-cache
 
 # Check Docker logs
-docker-compose logs
+docker compose -f docker/docker-compose.yml logs
 
 # Verify Dockerfile syntax
 docker build --no-cache -t test-image .
@@ -830,7 +849,7 @@ For more troubleshooting help, see [DOCKER_TROUBLESHOOTING.md](DOCKER_TROUBLESHO
 
 ## License
 
-[Specify your license here]
+MIT License. See [LICENSE](LICENSE) for details.
 
 ## Contributors
 

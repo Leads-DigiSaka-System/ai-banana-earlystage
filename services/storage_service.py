@@ -153,3 +153,17 @@ def read_image_bytes(image_path: str, project_root: Optional[Path] = None) -> by
             "image_path looks like MinIO but STORAGE_ENDPOINT is not set; cannot read image"
         )
     return get_image(client, image_path)
+
+
+class StorageService:
+    """
+    Wrapper for DAG and callers that need a single get_image(image_path) API.
+    Enhancement 2: used by model_retraining_dag (validate_new_data, preprocess_new_data).
+    """
+
+    def __init__(self, project_root: Optional[Path] = None):
+        self.project_root = project_root
+
+    def get_image(self, image_path: str) -> bytes:
+        """Load image bytes from local (data/...) or MinIO (bucket/...)."""
+        return read_image_bytes(image_path, project_root=self.project_root)
